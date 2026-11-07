@@ -1,0 +1,21 @@
+services:
+  frontend:
+    container_name: vis-frontend
+    build:
+      context: ./frontend
+      dockerfile: ../docker/frontend/Dockerfile
+    working_dir: /app
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+  processing:
+    container_name: vis-processing
+    build:
+      context: ./processing
+      dockerfile: ../docker/processing/Dockerfile
+    working_dir: /app
+    volumes:
+      - ./processing:/app

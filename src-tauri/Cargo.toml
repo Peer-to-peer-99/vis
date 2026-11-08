@@ -27,3 +27,5 @@ nokhwa = {
     version = "0.10.11",
     features = ["input-native", "camera-sync-impl"]
 }
+base64 = "0.23.1"
+image = { version = "0.25", features = ["jpeg"] }

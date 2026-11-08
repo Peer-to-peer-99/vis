@@ -16,6 +16,7 @@
     "format": "prettier --write --experimental-cli src/"
   },
   "dependencies": {
+    "@mediapipe/tasks-vision": "^1.2.2",
     "@tauri-apps/api": "^2.12.4",
     "pinia": "^4.1.0",
     "vue": "^3.5.42",

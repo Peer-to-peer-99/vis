@@ -1,17 +1,33 @@
-
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { onMounted, ref } from 'vue';
 
 import { useCameraStore } from '@/stores/camera/camera.store';
 import CameraPreview from '@/components/camera/CameraPreview.vue';
+import BackgroundSelector from '@/components/camera/BackgroundSelector.vue';
 
+import type { BackgroundSettings } from '@/services/camera/composition-service';
 const camera = useCameraStore();
+const selectedBackground = ref<File | null>(null);
+
+const backgroundSettings = ref<BackgroundSettings>({
+  zoom: 1,
+  positionX: 50,
+  positionY: 50,
+  fit: 'cover',
+});
+
+function handleBackgroundSelect(file: File) {
+  selectedBackground.value = file;
+}
+
+function handleBackgroundUpdate(settings: BackgroundSettings) {
+  backgroundSettings.value = settings;
+}
 
 onMounted(() => {
   camera.loadDevices();
 });
 </script>
-
 <template>
   <main class="camera-view">
     <header>
@@ -23,11 +39,17 @@ onMounted(() => {
     </header>
 
     <section class="workspace">
-      <CameraPreview :is-running="camera.isRunning" />
-
+      <CameraPreview
+        :is-running="camera.isRunning"
+        :background-file="selectedBackground"
+        :background-settings="backgroundSettings"
+      />
       <div class="controls">
         <label for="camera">Select camera</label>
-
+        <BackgroundSelector
+          @select="handleBackgroundSelect"
+          @update="handleBackgroundUpdate"
+        />
         <select
           id="camera"
           v-model="camera.selectedDeviceId"

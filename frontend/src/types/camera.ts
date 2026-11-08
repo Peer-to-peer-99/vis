@@ -15,7 +15,7 @@ interface CameraState
   error: string | null;
 }
 
-export  {
+export type {
   CameraDevice,
   CameraState
 }

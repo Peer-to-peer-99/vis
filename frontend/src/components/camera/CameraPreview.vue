@@ -1,13 +1,19 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { ref, watch } from 'vue';
+
 import type { IdentitySettings } from '@/types/settings';
-import type { UnlistenFn } from '@tauri-apps/api/event';
 
-import { CameraService } from '@/services/camera/camera-service';
-import { BackgroundService } from '@/services/camera/background-service';
-import { CompositionService } from '@/services/camera/composition-service';
+import {
+  CompositionService,
+} from '@/services/camera/composition-service';
 
-import type { BackgroundSettings } from '@/services/camera/composition-service';
+import type {
+  BackgroundSettings,
+} from '@/services/camera/composition-service';
+
+import { useCameraFrames } from '@/composables/camera/useCameraFrames';
+import { useCameraBackground } from '@/composables/camera/useCameraBackground';
+import { useVirtualCamera } from '@/composables/camera/useVirtualCamera';
 
 const props = defineProps<{
   isRunning: boolean;
@@ -19,35 +25,41 @@ const props = defineProps<{
 const canvas = ref<HTMLCanvasElement | null>(null);
 
 const hasFrame = ref(false);
-const cameraError = ref('');
 const backgroundError = ref('');
-const segmenterReady = ref(false);
 
-const backgroundService = new BackgroundService();
 const compositionService = new CompositionService();
 
-const frameImage = new Image();
-const backgroundImage = new Image();
+const {
+  backgroundImage,
+  backgroundReady,
+  segmenterReady,
+  error: backgroundServiceError,
+  processFrame,
+} = useCameraBackground(() => props.backgroundFile);
 
-let unlistenFrame: UnlistenFn | undefined;
-let unlistenError: UnlistenFn | undefined;
+const {
+  error: cameraError,
+} = useCameraFrames(handleFrame);
 
-let backgroundUrl: string | null = null;
-let backgroundReady = false;
-let processing = false;
-let mounted = true;
+const {
+  isRunning: virtualCameraRunning,
+  error: virtualCameraError,
+  stop: stopVirtualCamera,
+  publishFrame,
+} = useVirtualCamera(canvas);
 
 function drawRawFrame(frame: HTMLImageElement): void {
-  const context = canvas.value?.getContext('2d');
+  const element = canvas.value;
+  const context = element?.getContext('2d');
 
-  if (!context || !canvas.value) return;
+  if (!element || !context) return;
 
   if (
-    canvas.value.width !== frame.naturalWidth ||
-    canvas.value.height !== frame.naturalHeight
+    element.width !== frame.naturalWidth ||
+    element.height !== frame.naturalHeight
   ) {
-    canvas.value.width = frame.naturalWidth;
-    canvas.value.height = frame.naturalHeight;
+    element.width = frame.naturalWidth;
+    element.height = frame.naturalHeight;
   }
 
   context.drawImage(
@@ -59,141 +71,77 @@ function drawRawFrame(frame: HTMLImageElement): void {
   );
 
   hasFrame.value = true;
+
+  void publishFrame();
 }
 
-function handleFrame(frame: string): void {
-  if (processing || !mounted) return;
+async function handleFrame(frame: HTMLImageElement): Promise<void> {
+  if (!props.isRunning) return;
 
-  processing = true;
-
-  frameImage.onload = () => {
-    if (!mounted) {
-      processing = false;
-      return;
-    }
-
-    if (!props.backgroundFile || !backgroundReady || !segmenterReady.value) {
-      drawRawFrame(frameImage);
-      processing = false;
-      return;
-    }
-
-    try {
-      backgroundService.processFrame(frameImage, (result) => {
-        if (!mounted) {
-          processing = false;
-          return;
-        }
-
-        try {
-          if (result && backgroundReady && canvas.value) {
-            compositionService.render(
-              frameImage,
-              backgroundImage,
-              result,
-              canvas.value,
-              props.backgroundSettings,
-              props.identitySettings,
-            );
-
-            hasFrame.value = true;
-          } else {
-            drawRawFrame(frameImage);
-          }
-        } catch (error) {
-          backgroundError.value = error instanceof Error
-            ? error.message
-            : 'Failed to compose background.';
-
-          drawRawFrame(frameImage);
-        }
-
-        processing = false;
-      });
-    } catch (error) {
-      backgroundError.value = error instanceof Error
-        ? error.message
-        : 'Failed to process camera frame.';
-
-      drawRawFrame(frameImage);
-      processing = false;
-    }
-  };
-
-  frameImage.onerror = () => {
-    processing = false;
-    cameraError.value = 'Failed to decode camera frame.';
-  };
-
-  frameImage.src = `data:image/jpeg;base64,${frame}`;
-}
-
-function loadBackground(file: File | null): void {
-  backgroundReady = false;
-  backgroundError.value = '';
-
-  if (backgroundUrl) {
-    URL.revokeObjectURL(backgroundUrl);
-    backgroundUrl = null;
+  if (
+    !props.backgroundFile ||
+    !backgroundReady.value ||
+    !segmenterReady.value
+  ) {
+    drawRawFrame(frame);
+    return;
   }
 
-  if (!file) return;
+  try {
+    const result = await processFrame(frame);
 
-  backgroundUrl = URL.createObjectURL(file);
+    if (!canvas.value) return;
 
-  backgroundImage.onload = () => {
-    backgroundReady = true;
-  };
+    if (!result || !backgroundReady.value) {
+      drawRawFrame(frame);
+      return;
+    }
 
-  backgroundImage.onerror = () => {
-    backgroundError.value = 'Failed to load background image.';
-  };
+    compositionService.render(
+      frame,
+      backgroundImage,
+      result,
+      canvas.value,
+      props.backgroundSettings,
+      props.identitySettings,
+    );
 
-  backgroundImage.src = backgroundUrl;
+    hasFrame.value = true;
+
+    void publishFrame();
+  } catch (exception) {
+    backgroundError.value = exception instanceof Error
+      ? exception.message
+      : 'Failed to process background.';
+
+    drawRawFrame(frame);
+  }
 }
 
 watch(
-  () => props.backgroundFile,
-  (file) => {
-    loadBackground(file);
+  () => props.isRunning,
+  async (running) => {
+    if (!running) {
+      hasFrame.value = false;
+
+      try {
+        await stopVirtualCamera();
+      } catch (exception) {
+        console.error(
+          'Failed to stop virtual camera:',
+          exception,
+        );
+      }
+    }
   },
-  { immediate: true },
 );
 
-onMounted(async () => {
-  unlistenFrame = await CameraService.onFrame(handleFrame);
-
-  unlistenError = await CameraService.onError((error) => {
-    cameraError.value = error;
-  });
-
-  try {
-    await backgroundService.initialize();
-
-    if (mounted) {
-      segmenterReady.value = true;
-    } else {
-      backgroundService.dispose();
-    }
-  } catch (error) {
-    backgroundError.value = error instanceof Error
-      ? error.message
-      : 'Failed to initialize background segmentation.';
-  }
-});
-
-onUnmounted(() => {
-  mounted = false;
-
-  unlistenFrame?.();
-  unlistenError?.();
-
-  backgroundService.dispose();
-
-  if (backgroundUrl) {
-    URL.revokeObjectURL(backgroundUrl);
-  }
-});
+watch(
+  backgroundServiceError,
+  (message) => {
+    backgroundError.value = message;
+  },
+);
 </script>
 
 <template>
@@ -227,6 +175,10 @@ onUnmounted(() => {
 
     <p v-if="backgroundError" class="background-error">
       {{ backgroundError }}
+    </p>
+
+    <p v-if="virtualCameraError" class="virtual-camera-error">
+      {{ virtualCameraError }}
     </p>
   </section>
 </template>
@@ -292,7 +244,8 @@ onUnmounted(() => {
 }
 
 .camera-error,
-.background-error {
+.background-error,
+.virtual-camera-error {
   position: absolute;
   bottom: 8px;
   left: 12px;
@@ -308,5 +261,10 @@ onUnmounted(() => {
 .background-error {
   bottom: 28px;
   color: #f59e0b;
+}
+
+.virtual-camera-error {
+  bottom: 48px;
+  color: #ef4444;
 }
 </style>

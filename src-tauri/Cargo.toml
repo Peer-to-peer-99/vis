@@ -29,3 +29,4 @@ nokhwa = {
 }
 base64 = "0.23.1"
 image = { version = "0.25", features = ["jpeg"] }
+v4l = "0.14"

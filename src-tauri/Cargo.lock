@@ -95,6 +95,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-log",
+ "v4l",
 ]
 
 [[package]]

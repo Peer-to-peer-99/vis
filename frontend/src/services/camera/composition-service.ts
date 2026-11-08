@@ -1,4 +1,5 @@
 import type { SegmentationResult } from './background-service';
+import type { IdentitySettings } from '@/types/settings';
 
 export interface BackgroundSettings {
   zoom: number;
@@ -17,6 +18,7 @@ export class CompositionService {
     result: SegmentationResult,
     canvas: HTMLCanvasElement,
     settings: BackgroundSettings,
+    identitySettings: IdentitySettings | null,
   ): void {
     const width = frame.naturalWidth;
     const height = frame.naturalHeight;
@@ -103,6 +105,96 @@ export class CompositionService {
       width,
       height,
     );
+
+    if (identitySettings) {
+      this.drawIdentity(
+        outputContext,
+        width,
+        height,
+        identitySettings,
+      );
+    }
+  }
+
+  private drawIdentity(
+    context: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    settings: IdentitySettings,
+  ): void {
+    const { lawyerName, officeName, logo, fontFamily, fontSize, textColor, position } = settings;
+
+    if (!lawyerName.trim() && !officeName.trim() && !logo) {
+      return;
+    }
+
+    context.save();
+
+    const padding = width * 0.05;
+    const bottom = height * 0.08;
+
+    let x = padding;
+    let textAlign: CanvasTextAlign = 'left';
+
+    if (position === 'bottom-center') {
+      x = width / 2;
+      textAlign = 'center';
+    }
+
+    if (position === 'bottom-right') {
+      x = width - padding;
+      textAlign = 'right';
+    }
+
+    const nameFontSize = Math.max(12, fontSize * width / 1280);
+    const officeFontSize = nameFontSize * 0.55;
+
+    context.textAlign = textAlign;
+    context.textBaseline = 'middle';
+    context.fillStyle = textColor;
+    context.shadowColor = 'rgba(0, 0, 0, 0.7)';
+    context.shadowBlur = 6;
+
+    if (lawyerName.trim()) {
+      context.font = `bold ${nameFontSize}px "${fontFamily}"`;
+
+      context.fillText(
+        lawyerName,
+        x,
+        height - bottom - officeFontSize,
+      );
+    }
+
+    if (officeName.trim()) {
+      context.font = `${officeFontSize}px "${fontFamily}"`;
+
+      context.fillText(
+        officeName,
+        x,
+        height - bottom,
+      );
+    }
+
+    if (logo && logo.complete && logo.naturalWidth > 0) {
+      const logoHeight = height * 0.10;
+      const logoWidth = logoHeight * logo.naturalWidth / logo.naturalHeight;
+
+      const logoX = position === 'bottom-left'
+        ? width - padding - logoWidth
+        : padding;
+
+      context.shadowBlur = 0;
+
+      context.drawImage(
+        logo,
+        logoX,
+        height - bottom - logoHeight / 2,
+        logoWidth,
+        logoHeight,
+      );
+    }
+
+    context.restore();
   }
 
   private drawBackground(

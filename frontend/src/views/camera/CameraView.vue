@@ -2,12 +2,18 @@
 import { onMounted, ref } from 'vue';
 
 import { useCameraStore } from '@/stores/camera/camera.store';
+
 import CameraPreview from '@/components/camera/CameraPreview.vue';
 import BackgroundSelector from '@/components/camera/BackgroundSelector.vue';
+import IdentitySettings from '@/components/camera/IdentitySettings.vue';
 
+import type { IdentitySettings as IdentitySettingsType } from '@/types/settings';
 import type { BackgroundSettings } from '@/services/camera/composition-service';
+
 const camera = useCameraStore();
+
 const selectedBackground = ref<File | null>(null);
+const identitySettings = ref<IdentitySettingsType | null>(null);
 
 const backgroundSettings = ref<BackgroundSettings>({
   zoom: 1,
@@ -15,6 +21,10 @@ const backgroundSettings = ref<BackgroundSettings>({
   positionY: 50,
   fit: 'cover',
 });
+
+function handleIdentityUpdate(settings: IdentitySettingsType) {
+  identitySettings.value = settings;
+}
 
 function handleBackgroundSelect(file: File) {
   selectedBackground.value = file;
@@ -43,6 +53,7 @@ onMounted(() => {
         :is-running="camera.isRunning"
         :background-file="selectedBackground"
         :background-settings="backgroundSettings"
+        :identity-settings="identitySettings"
       />
       <div class="controls">
         <label for="camera">Select camera</label>
@@ -50,6 +61,7 @@ onMounted(() => {
           @select="handleBackgroundSelect"
           @update="handleBackgroundUpdate"
         />
+        <IdentitySettings @update="handleIdentityUpdate" />
         <select
           id="camera"
           v-model="camera.selectedDeviceId"

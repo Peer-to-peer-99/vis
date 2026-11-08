@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from 'vue';
-
+import type { IdentitySettings } from '@/types/settings';
 import type { UnlistenFn } from '@tauri-apps/api/event';
 
 import { CameraService } from '@/services/camera/camera-service';
@@ -13,6 +13,7 @@ const props = defineProps<{
   isRunning: boolean;
   backgroundFile: File | null;
   backgroundSettings: BackgroundSettings;
+  identitySettings: IdentitySettings | null;
 }>();
 
 const canvas = ref<HTMLCanvasElement | null>(null);
@@ -92,6 +93,7 @@ function handleFrame(frame: string): void {
               result,
               canvas.value,
               props.backgroundSettings,
+              props.identitySettings,
             );
 
             hasFrame.value = true;
